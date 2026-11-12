@@ -9,7 +9,7 @@ def start_direct_challenge_live():
     
     # आपका लाइव यूट्यूब स्ट्रीमिंग यूआरएल और सीक्रेट चाबी
     STREAM_URL = "rtmp://a.rtmp.youtube.com/live2"
-    STREAM_KEY = "mvp6-rhpk-6jqb-9ya9-9d8t"
+    STREAM_KEY = "qska-ybs8-9p8v-7umw-08g0"
     
     rtmp_url = f"{STREAM_URL}/{STREAM_KEY}"
     command = [
