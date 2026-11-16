@@ -2,18 +2,17 @@ import os
 import time
 import subprocess
 import threading
-import json
+import pytchat
 
 # आपके चैनल का हैंडल और कूलडाउन समय (3600 सेकंड = 1 घंटा)
 CHANNEL_HANDLE = "@Talkto-urs"
 COOLDOWN_SECONDS = 3600  
 
-last_welcomed = {}  # यूजर का आखिरी वेलकम टाइम सेव करने के लिए
-start_timestamp = time.time()  # स्क्रिप्ट शुरू होने का समय
+last_welcomed = {}
 
-def clear_welcome_text():
+def set_welcome_text(msg):
     with open("welcome.txt", "w", encoding="utf-8") as f:
-        f.write("")
+        f.write(msg)
 
 def get_live_video_id():
     try:
@@ -21,73 +20,55 @@ def get_live_video_id():
             "yt-dlp", "--get-id", "--playlist-items", "1",
             f"https://youtube.com{CHANNEL_HANDLE}/live"
         ]
-        res = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode().strip()
-        if len(res) == 11:
-            return res
-    except Exception:
-        pass
+        res = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode().strip().splitlines()
+        for line in res:
+            if len(line.strip()) == 11:
+                return line.strip()
+    except Exception as e:
+        print(f"Video ID खोजने में समस्या: {e}")
     return None
 
 def chat_listener():
-    clear_welcome_text()
+    # सबसे पहले 15 सेकंड तक टेस्ट एनिमेशन दिखाएगा ताकि आप कन्फर्म कर सकें
+    set_welcome_text("Welcome to Live Stream!")
+    time.sleep(15)
+    set_welcome_text("")
+
     while True:
         try:
             vid_id = get_live_video_id()
             if not vid_id:
+                print("⏳ लाइव स्ट्रीम ID का इंतज़ार हो रहा है (10 सेकंड)...")
                 time.sleep(10)
                 continue
 
-            print(f"✅ लाइव चैट से जुड़ गया (ID: {vid_id})")
-            chat_file = "chat_temp.live_chat.json"
-            if os.path.exists(chat_file):
-                os.remove(chat_file)
-
-            chat_cmd = [
-                "yt-dlp", "--skip-download", "--write-subs", "--sub-langs", "live_chat",
-                "--output", "chat_temp", f"https://youtube.comwatch?v={vid_id}"
-            ]
-            proc = subprocess.Popen(chat_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            print(f"✅ लाइव चैट से जुड़ गया! Video ID: {vid_id}")
+            chat = pytchat.create(video_id=vid_id)
             
-            last_pos = 0
-            initial_skip_done = False
+            # शुरू के पुराने चैट बफर को खाली करना ताकि पुराने मैसेज पर एनिमेशन न आए
+            time.sleep(3)
+            if chat.is_alive():
+                chat.get()
 
-            while proc.poll() is None:
-                if os.path.exists(chat_file):
-                    with open(chat_file, "r", encoding="utf-8") as f:
-                        f.seek(last_pos)
-                        lines = f.readlines()
-                        last_pos = f.tell()
-
-                        # शुरू के 5 सेकंड में पुराने लोड हुए चैट मैसेज को स्किप करना
-                        if not initial_skip_done and (time.time() - start_timestamp) < 8:
-                            continue
-                        initial_skip_done = True
-
-                        for line in lines:
-                            try:
-                                data = json.loads(line)
-                                actions = data.get("replayChatItemAction", {}).get("actions", [{}])
-                                msg = actions[0].get("addChatItemAction", {}).get("item", {}).get("liveChatTextMessageRenderer", {})
-                                user = msg.get("authorName", {}).get("simpleText")
-                                
-                                if user:
-                                    now = time.time()
-                                    prev_time = last_welcomed.get(user, 0)
-                                    
-                                    # यदि यूजर नया है या 1 घंटे (3600 सेकंड) बाद वापस आया है
-                                    if (now - prev_time) >= COOLDOWN_SECONDS:
-                                        last_welcomed[user] = now
-                                        label = f"Welcome {user}!" if prev_time == 0 else f"Welcome Back {user}!"
-                                        print(f"🎉 एनिमेशन चालू: {label}")
-                                        with open("welcome.txt", "w", encoding="utf-8") as wf:
-                                            wf.write(label)
-                                        time.sleep(8)  # 8 सेकंड तक स्क्रीन पर एनिमेशन दिखेगा
-                                        clear_welcome_text()
-                            except Exception:
-                                continue
+            while chat.is_alive():
+                for c in chat.get().sync_items():
+                    user = c.author.name
+                    now = time.time()
+                    prev_time = last_welcomed.get(user, 0)
+                    
+                    print(f"💬 चैट मैसेज: {user}: {c.message}")
+                    
+                    # यदि यूजर नया है या 1 घंटे (3600 सेकंड) बाद वापस आया है
+                    if (now - prev_time) >= COOLDOWN_SECONDS:
+                        last_welcomed[user] = now
+                        label = f"Welcome {user}!" if prev_time == 0 else f"Welcome Back {user}!"
+                        print(f"🎉 स्क्रीन पर एनिमेशन दिखाया जा रहा है: {label}")
+                        set_welcome_text(label)
+                        time.sleep(8)
+                        set_welcome_text("")
                 time.sleep(1)
         except Exception as e:
-            print(f"चैट रीकनेक्ट हो रही है: {e}")
+            print(f"⚠️ चैट लिसनर रीकनेक्ट हो रहा है: {e}")
             time.sleep(5)
 
 def start_direct_challenge_live():
@@ -98,19 +79,16 @@ def start_direct_challenge_live():
     STREAM_KEY = "qska-ybs8-9p8v-7umw-08g0"
     rtmp_url = f"{STREAM_URL}/{STREAM_KEY}"
 
-    # स्टार्ट होते ही 6 सेकंड का टेस्ट मैसेज दिखाएगा ताकि आप कन्फर्म कर सकें
-    with open("welcome.txt", "w", encoding="utf-8") as f:
-        f.write("Live Chat Ready!")
-
+    set_welcome_text("")
     threading.Thread(target=chat_listener, daemon=True).start()
 
-    # स्लाइडिंग एनिमेशन फ़िल्टर (नीचे की तरफ सुनहरे अक्षर और काला बॉक्स)
+    # स्लाइडिंग एनिमेशन फ़िल्टर
     vf_filter = (
         "scale=1280:720,format=yuv420p,"
         "drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
-        "textfile=welcome.txt:reload=1:fontcolor=yellow:fontsize=38:"
-        "box=1:boxcolor=black@0.8:boxborderw=14:"
-        "x=w-mod(t*190\\,w+tw):y=h-85"
+        "textfile=welcome.txt:reload=1:fontcolor=yellow:fontsize=40:"
+        "box=1:boxcolor=black@0.8:boxborderw=15:"
+        "x=w-mod(t*190\\,w+tw):y=h-90"
     )
 
     command = [
@@ -125,7 +103,7 @@ def start_direct_challenge_live():
         "-f", "flv", rtmp_url
     ]
     
-    print("⚡ 24/7 लाइव स्ट्रीम + 1-घंटा कूलडाउन वेलकम एनिमेशन शुरू...")
+    print("⚡ 24/7 लाइव स्ट्रीम + वेलकम एनिमेशन शुरू...")
     
     while True:
         try:
