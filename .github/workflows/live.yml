@@ -15,9 +15,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y ffmpeg fonts-dejavu-core
-        pip install pytchat
+        pip install -U yt-dlp
 
     - name: Start Python Live Stream Loop
-      env:
-        YOUTUBE_KEY: ${{ secrets.YOUTUBE_KEY }}
       run: python stream.py
