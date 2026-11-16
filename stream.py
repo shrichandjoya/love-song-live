@@ -94,7 +94,7 @@ def start_direct_challenge_live():
     video_file = "love_video.mp4"
     audio_file = "love_audio.mp3"
     
-    STREAM_URL = "rtmp://://youtube.com"
+    STREAM_URL = "rtmp://a.rtmp.youtube.com/live2"
     STREAM_KEY = "qska-ybs8-9p8v-7umw-08g0"
     rtmp_url = f"{STREAM_URL}/{STREAM_KEY}"
 
