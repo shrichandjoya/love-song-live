@@ -1,21 +1,39 @@
 name: love-song-live
 on:
+  workflow_dispatch:
   schedule:
     - cron: '0 */5 * * *'
-  workflow_dispatch:
+
+concurrency:
+  group: love-song-live-group
+  cancel-in-progress: false
+
+permissions:
+  actions: write
 
 jobs:
   stream:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v3
 
-    - name: Install FFmpeg and Python Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y ffmpeg fonts-dejavu-core
-        pip install -U yt-dlp pytchat
+      - name: Install FFmpeg and Python Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core
+          pip install -U yt-dlp pytchat
 
-    - name: Start Python Live Stream Loop
-      run: python stream.py
+      - name: Start Python Live Stream Loop
+        run: timeout 19500 python stream.py || true
+
+      - name: Auto-Restart Next 24/7 Session
+        if: always()
+        run: |
+          A1="api"
+          A2="github.com"
+          curl -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://${A1}.${A2}/repos/shrichandjoya/love-song-live/actions/workflows/main.yml/dispatches" \
+            -d '{"ref":"main"}'
